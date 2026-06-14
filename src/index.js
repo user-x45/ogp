@@ -28,9 +28,16 @@ export default {
       const res = await fetch(targetUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
-          'Referer': new URL(targetUrl).origin + '/',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
         },
         redirect: 'follow',
       });
@@ -44,14 +51,13 @@ export default {
 
       let ogImage = null;
 
-      const rewriter = new HTMLRewriter().on(
-        'meta[property="og:image"]',
-        {
-          element(element) {
-            ogImage = element.getAttribute('content');
-          },
-        }
-      );
+      const rewriter = new HTMLRewriter()
+        .on('meta[property="og:image"]', {
+          element(el) { ogImage = ogImage || el.getAttribute('content'); }
+        })
+        .on('meta[name="twitter:image"]', {
+          element(el) { ogImage = ogImage || el.getAttribute('content'); }
+        });
 
       await rewriter.transform(res).text();
 
