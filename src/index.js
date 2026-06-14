@@ -1,58 +1,80 @@
 export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-    const targetUrl = url.searchParams.get("url");
+  async fetch(request, env, ctx) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      });
+    }
+
+    if (request.method !== 'GET') {
+      return new Response('Method Not Allowed', { status: 405 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const targetUrl = searchParams.get('url');
 
     if (!targetUrl) {
-      return new Response(JSON.stringify({ error: "url parameter is required" }), {
+      return new Response('Missing "url" parameter', {
         status: 400,
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Access-Control-Allow-Origin': '*' }
       });
     }
 
-    let parsedUrl;
     try {
-      parsedUrl = new URL(targetUrl);
-    } catch {
-      return new Response(JSON.stringify({ error: "Invalid URL" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+          'Referer': new URL(targetUrl).origin + '/',
+        },
+        redirect: 'follow',
       });
-    }
 
-    const response = await fetch(parsedUrl.toString(), {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; OGImageBot/1.0)" },
-    });
+      if (!res.ok) {
+        return new Response(`Failed to fetch: ${res.status} ${res.statusText} from ${targetUrl}`, {
+          status: 500,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        });
+      }
 
-    if (!response.ok) {
-      return new Response(
-        JSON.stringify({ error: `Failed to fetch URL: ${response.status}` }),
-        { status: 502, headers: { "Content-Type": "application/json" } }
+      let ogImage = null;
+
+      const rewriter = new HTMLRewriter().on(
+        'meta[property="og:image"]',
+        {
+          element(element) {
+            ogImage = element.getAttribute('content');
+          },
+        }
       );
-    }
 
-    const html = await response.text();
+      await rewriter.transform(res).text();
 
-    const match = html.match(
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i
-    ) ?? html.match(
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i
-    );
+      if (ogImage) {
+        return new Response(ogImage, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      } else {
+        return new Response('og:image not found', {
+          status: 404,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        });
+      }
 
-    if (!match) {
-      return new Response(JSON.stringify({ ogImage: null }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
+    } catch (error) {
+      return new Response(`Error: ${error.message}`, {
+        status: 500,
+        headers: { 'Access-Control-Allow-Origin': '*' }
       });
     }
-
-    const ogImage = match[1].startsWith("http")
-      ? match[1]
-      : new URL(match[1], parsedUrl.origin).toString();
-
-    return new Response(JSON.stringify({ ogImage }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
   },
 };
